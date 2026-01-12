@@ -4,23 +4,31 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
-use Tymon\JWTAuth\Facades\JWTAuth;
+// use Tymon\JWTAuth\Facades\JWTAuth;
+// use 
 use Illuminate\Support\Facades\Hash;
+use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
 {
     public function register(Request $request)
     {
         $data = $request->validate([
-            'name'     => 'required',
+            'name'     => 'required|string|max:255',
+            'username' => 'required|string|max:255|unique:users',
             'email'    => 'required|email|unique:users',
+            'phone'    => 'required|string|unique:users',
             'password' => 'required|min:6',
-            'role'     => 'nullable|string'
+            'address'  => 'nullable|string',
+            'role'     => 'nullable|string|in:user,candidate,employer'
         ]);
 
         $user = User::create([
             'name'     => $data['name'],
+            'username' => $data['username'],
             'email'    => $data['email'],
+            'phone'    => $data['phone'],
+            'address'  => $data['address'] ?? null,
             'password' => Hash::make($data['password']),
             'role'     => $data['role'] ?? 'user'
         ]);
@@ -31,22 +39,36 @@ class AuthController extends Controller
             'message' => 'Registered successfully',
             'token'   => $token,
             'user'    => $user
-        ]);
+        ], 201);
     }
+
+   
 
     public function login(Request $request)
     {
-        $credentials = $request->only(['email', 'password']);
+        $request->validate([
+            'login'    => 'required|string',
+            'password' => 'required|string'
+        ]);
+
+        $loginField = filter_var($request->login, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+
+        $credentials = [
+            $loginField => $request->login,
+            'password'  => $request->password
+        ];
 
         if (! $token = JWTAuth::attempt($credentials)) {
             return response()->json(['error' => 'Invalid credentials'], 401);
         }
 
+        $user = User::where($loginField, $request->login)->first();
+
         return response()->json([
             'message' => 'Login successful',
             'token'   => $token,
-            'user'    => auth()->user()
-        ]);
+            'user'    => $user
+        ], 200);
     }
 
     public function logout()
@@ -65,6 +87,8 @@ class AuthController extends Controller
 
     public function profile()
     {
-        return response()->json(auth()->user());
+        $user = JWTAuth::parseToken()->authenticate();
+
+        return response()->json($user);
     }
 }
